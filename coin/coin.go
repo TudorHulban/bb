@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"test/configuration"
+	"test/ordering"
 	"time"
 
 	"github.com/govalues/decimal"
@@ -22,19 +23,26 @@ type priceList struct {
 }
 
 type Coin struct {
+	ordering ordering.IOrdering
+
 	pricesShortPeriod  priceList
 	pricesMediumPeriod priceList
 
 	secondsShortPeriod          uint
 	secondsMediumPeriodInterval uint
-	secondsMinimumTimeframe     uint
+	secondsMinimumTimeframe     uint // between oldest medium and now
 
 	percentDeltaChange decimal.Decimal
+	currentQuantity    decimal.Decimal
 
 	mux sync.RWMutex
 }
 
-func NewCoin(options ...OptionCoin) *Coin {
+type ParamsNewCoin struct {
+	Ordering ordering.IOrdering
+}
+
+func NewCoin(params *ParamsNewCoin, options ...OptionCoin) *Coin {
 	deltaChange, _ := decimal.NewFromFloat64(configuration.DefaultPercentDeltaChange)
 
 	c := Coin{
@@ -48,6 +56,8 @@ func NewCoin(options ...OptionCoin) *Coin {
 		secondsShortPeriod:          configuration.DefaultSecondsShortPeriod,
 		secondsMediumPeriodInterval: configuration.DefaultSecondsMediumPeriod,
 		percentDeltaChange:          deltaChange,
+
+		ordering: params.Ordering,
 	}
 
 	for _, option := range options {
@@ -93,7 +103,10 @@ func (c *Coin) AverageMediumPeriod() (decimal.Decimal, error) {
 }
 
 // 100 * (newPrice - currentPrice) / currentPrice < delta
-func (c *Coin) IsPriceChange(newPrice decimal.Decimal) error {
+func (c *Coin) isPriceChange(newPrice decimal.Decimal) error {
+	c.pricesShortPeriod.mux.Lock()
+	defer c.pricesShortPeriod.mux.Unlock()
+
 	currentPrice := c.pricesShortPeriod.prices.Front().Value.(Price).Value
 
 	// fmt.Println("currentPrice", currentPrice.String())
@@ -139,7 +152,11 @@ func (c *Coin) IsPriceChange(newPrice decimal.Decimal) error {
 }
 
 func (c *Coin) AddPriceChange(price decimal.Decimal) {
-	c.mux.Lock()
+	if c.isPriceChange(price) != nil {
+		return
+	}
+
+	c.pricesShortPeriod.mux.Lock()
 
 	last := c.pricesShortPeriod.prices.Back()
 
@@ -154,7 +171,7 @@ func (c *Coin) AddPriceChange(price decimal.Decimal) {
 		},
 	)
 
-	c.mux.Unlock()
+	c.pricesShortPeriod.mux.Unlock()
 }
 
 func (c *Coin) PriceChanges() int {
