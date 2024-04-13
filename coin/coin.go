@@ -103,7 +103,7 @@ func (c *Coin) AverageMediumPeriod() (decimal.Decimal, error) {
 }
 
 // 100 * (newPrice - currentPrice) / currentPrice < delta
-func (c *Coin) isPriceChange(newPrice decimal.Decimal) error {
+func (c *Coin) isPriceChange(priceNew decimal.Decimal) error {
 	c.pricesShortPeriod.mux.Lock()
 	defer c.pricesShortPeriod.mux.Unlock()
 
@@ -111,7 +111,7 @@ func (c *Coin) isPriceChange(newPrice decimal.Decimal) error {
 
 	// fmt.Println("currentPrice", currentPrice.String())
 
-	difference, errSubtract := newPrice.SubAbs(currentPrice)
+	difference, errSubtract := priceNew.SubAbs(currentPrice)
 	if errSubtract != nil {
 		return errSubtract
 	}
