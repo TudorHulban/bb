@@ -1,6 +1,8 @@
 package strategies
 
 import (
+	"errors"
+	"test/helpers"
 	"test/ordering"
 
 	"github.com/govalues/decimal"
@@ -11,10 +13,43 @@ type StrategyDropSudden struct {
 	DropPercent     decimal.Decimal
 }
 
-func (s *StrategyDropSudden) AddPriceChange(params *ParamsAddPriceChange) (*ordering.Order, error) {
-	if s.PriceBeforeDrop == decimal.Zero {
-		s.PriceBeforeDrop = params.PriceNow
+type ParamsNewStrategyDropSudden struct {
+	PriceBeforeDrop decimal.Decimal
+	DropPercent     decimal.Decimal
+}
+
+func NewStrategyDropSudden(params ParamsNewStrategyDropSudden) *StrategyDropSudden {
+	// TODO: add input validation
+
+	return &StrategyDropSudden{
+		PriceBeforeDrop: params.PriceBeforeDrop,
+		DropPercent:     params.DropPercent,
+	}
+}
+
+func (s *StrategyDropSudden) SetPriceBeforeDrop(price decimal.Decimal) {
+	s.PriceBeforeDrop = price
+}
+
+func (s *StrategyDropSudden) AddPriceChange(params *ParamsAddPriceChange) (ordering.Action, error) {
+	difference, errSubtract := s.PriceBeforeDrop.Sub(params.PriceNow)
+	if errSubtract != nil {
+		return ordering.DoNothing, errSubtract
 	}
 
-	return nil, nil
+	if difference == decimal.Zero {
+		return ordering.DoNothing, errors.New("no price change")
+	}
+
+	if errPercent := helpers.PriceChangeByPercent(
+		&helpers.ParamsPriceChangeByPercent{
+			PriceOld: s.PriceBeforeDrop,
+			PriceNew: params.PriceNow,
+			Delta:    s.DropPercent,
+		},
+	); errPercent != nil {
+		return ordering.DoNothing, errors.New("no sudden drop")
+	}
+
+	return ordering.Buy, nil
 }

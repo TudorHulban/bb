@@ -3,10 +3,12 @@ package coin
 import (
 	"container/list"
 	"errors"
+	"fmt"
 	"sync"
 	"test/configuration"
 	"test/helpers"
 	"test/ordering"
+	"test/strategies"
 	"time"
 
 	"github.com/govalues/decimal"
@@ -35,6 +37,8 @@ type Coin struct {
 
 	percentDeltaChange decimal.Decimal
 	currentQuantity    decimal.Decimal
+
+	strategies []strategies.IStrategy
 
 	mux sync.RWMutex
 }
@@ -141,6 +145,27 @@ func (c *Coin) AddPriceChange(price decimal.Decimal) {
 	)
 
 	c.pricesShortPeriod.mux.Unlock()
+
+	c.validatePriceChange(price)
+}
+
+func (c *Coin) AddPriceChanges(prices []decimal.Decimal) {
+	for _, price := range prices {
+		c.AddPriceChange(price)
+	}
+}
+
+func (c *Coin) AddPriceChangesFloat(prices []float64) error {
+	for _, price := range prices {
+		priceDecimal, errDecimal := decimal.NewFromFloat64(price)
+		if errDecimal != nil {
+			return errDecimal
+		}
+
+		c.AddPriceChange(priceDecimal)
+	}
+
+	return nil
 }
 
 func (c *Coin) PriceChanges() int {
@@ -148,4 +173,24 @@ func (c *Coin) PriceChanges() int {
 	defer c.mux.Unlock()
 
 	return c.pricesShortPeriod.prices.Len()
+}
+
+func (c *Coin) validatePriceChange(price decimal.Decimal) {
+	for _, strategy := range c.strategies {
+		action, errStrategy := strategy.AddPriceChange(
+			&strategies.ParamsAddPriceChange{
+				PriceNow: price,
+			},
+		)
+		if errStrategy != nil {
+			fmt.Println(errStrategy)
+		}
+		if action != ordering.DoNothing {
+			fmt.Printf(
+				"%s at %s.\n",
+				action,
+				price,
+			)
+		}
+	}
 }
