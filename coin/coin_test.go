@@ -14,6 +14,7 @@ func TestCoin(t *testing.T) {
 			Ordering: ordering.NewOrderingLogOnly(),
 		},
 	)
+	require.NotNil(t, c)
 
 	c.AddPriceChange(decimal.One)
 

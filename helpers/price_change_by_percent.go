@@ -2,17 +2,48 @@ package helpers
 
 import (
 	"errors"
+	"fmt"
+	"test/apperrors"
 
 	"github.com/govalues/decimal"
 )
 
-func PriceChangeByPercent(priceOld, priceNew, delta decimal.Decimal) error {
-	difference, errSubtract := priceNew.SubAbs(priceOld)
+type ParamsPriceChangeByPercent struct {
+	PriceOld decimal.Decimal
+	PriceNew decimal.Decimal
+	Delta    decimal.Decimal
+}
+
+func (p ParamsPriceChangeByPercent) String() string {
+	return fmt.Sprintf(
+		"PriceOld: %s,\nPriceNew: %s,\nDelta: %s",
+		p.PriceOld.String(),
+		p.PriceNew.String(),
+		p.Delta.String(),
+	)
+}
+
+// 100 * (newPrice - currentPrice) / currentPrice < delta
+func PriceChangeByPercent(params *ParamsPriceChangeByPercent) error {
+	if params.PriceOld == decimal.Zero && params.PriceNew == decimal.Zero {
+		return apperrors.ErrorInvalidInputs{
+			InputsName: []string{
+				"PriceOld",
+				"PriceNew",
+			},
+		}
+	}
+
+	if params.PriceOld == decimal.Zero {
+		return nil
+	}
+
+	difference, errSubtract := params.PriceNew.SubAbs(params.PriceOld)
 	if errSubtract != nil {
 		return errSubtract
 	}
 
-	division, errDivision := difference.Quo(priceOld)
+	division, errDivision := difference.Quo(params.PriceOld)
 	if errDivision != nil {
 		return errDivision
 	}
@@ -22,7 +53,7 @@ func PriceChangeByPercent(priceOld, priceNew, delta decimal.Decimal) error {
 		return errMultiply00
 	}
 
-	subtract, errSubtract := multiply100.Sub(delta)
+	subtract, errSubtract := multiply100.Sub(params.Delta)
 	if errSubtract != nil {
 		return errSubtract
 	}

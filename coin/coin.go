@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"test/configuration"
+	"test/helpers"
 	"test/ordering"
 	"time"
 
@@ -102,53 +103,21 @@ func (c *Coin) AverageMediumPeriod() (decimal.Decimal, error) {
 	return sum.Quo(length)
 }
 
-// 100 * (newPrice - currentPrice) / currentPrice < delta
 func (c *Coin) isPriceChange(priceNew decimal.Decimal) error {
 	c.pricesShortPeriod.mux.Lock()
 	defer c.pricesShortPeriod.mux.Unlock()
 
-	currentPrice := c.pricesShortPeriod.prices.Front().Value.(Price).Value
-
-	// fmt.Println("currentPrice", currentPrice.String())
-
-	difference, errSubtract := priceNew.SubAbs(currentPrice)
-	if errSubtract != nil {
-		return errSubtract
+	if c.pricesShortPeriod.prices.Front() == nil {
+		return nil
 	}
 
-	// fmt.Println("difference", difference.String())
-
-	division, errDivision := difference.Quo(currentPrice)
-	if errDivision != nil {
-		return errDivision
-	}
-
-	// fmt.Println("division", division.String())
-
-	multiply100, errMultiply00 := division.FMA(decimal.Hundred, decimal.Zero)
-	if errMultiply00 != nil {
-		return errMultiply00
-	}
-
-	// fmt.Println("multiply100", multiply100.String())
-
-	subtract, errSubtract := multiply100.Sub(c.percentDeltaChange)
-	if errSubtract != nil {
-		return errSubtract
-	}
-
-	// fmt.Printf(
-	// 	"subtract %s - %s = %s\n",
-	// 	multiply100.String(),
-	// 	c.percentDeltaChange.String(),
-	// 	subtract.String(),
-	// )
-
-	if subtract.Sign() == -1 {
-		return errors.New("no price change")
-	}
-
-	return nil
+	return helpers.PriceChangeByPercent(
+		&helpers.ParamsPriceChangeByPercent{
+			PriceOld: c.pricesShortPeriod.prices.Front().Value.(Price).Value,
+			PriceNew: priceNew,
+			Delta:    c.percentDeltaChange,
+		},
+	)
 }
 
 func (c *Coin) AddPriceChange(price decimal.Decimal) {
