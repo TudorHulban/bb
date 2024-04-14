@@ -11,6 +11,8 @@ import (
 type StrategyDropSudden struct {
 	PriceBeforeDrop decimal.Decimal
 	DropPercent     decimal.Decimal
+
+	isReady bool
 }
 
 type ParamsNewStrategyDropSudden struct {
@@ -21,13 +23,23 @@ type ParamsNewStrategyDropSudden struct {
 func NewStrategyDropSudden(params ParamsNewStrategyDropSudden) *StrategyDropSudden {
 	// TODO: add input validation
 
-	return &StrategyDropSudden{
+	s := StrategyDropSudden{
 		PriceBeforeDrop: params.PriceBeforeDrop,
 		DropPercent:     params.DropPercent,
 	}
+
+	if params.PriceBeforeDrop.IsPos() {
+		s.isReady = true
+	}
+
+	return &s
 }
 
-func (s *StrategyDropSudden) SetPriceBeforeDrop(price decimal.Decimal) {
+func (s *StrategyDropSudden) IsReady() bool {
+	return s.isReady
+}
+
+func (s *StrategyDropSudden) SetPrice(price decimal.Decimal) {
 	s.PriceBeforeDrop = price
 }
 

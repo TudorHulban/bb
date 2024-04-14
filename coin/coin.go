@@ -1,10 +1,8 @@
 package coin
 
 import (
-	"container/list"
 	"errors"
 	"fmt"
-	"sync"
 	"test/configuration"
 	"test/helpers"
 	"test/ordering"
@@ -19,44 +17,34 @@ type Price struct {
 	Value  decimal.Decimal
 }
 
-type priceList struct {
-	prices *list.List
-
-	mux sync.RWMutex
-}
-
 type Coin struct {
 	ordering ordering.IOrdering
 
-	pricesShortPeriod  priceList
-	pricesMediumPeriod priceList
+	periodShort  timePeriod
+	periodMedium timePeriod
 
 	secondsShortPeriod          uint
 	secondsMediumPeriodInterval uint
-	secondsMinimumTimeframe     uint // between oldest medium and now
 
 	percentDeltaChange decimal.Decimal
 	currentQuantity    decimal.Decimal
 
 	strategies []strategies.IStrategy
-
-	mux sync.RWMutex
 }
 
 type ParamsNewCoin struct {
 	Ordering ordering.IOrdering
+
+	MinimumPriceChangesShortPeriod  int
+	MinimumPriceChangesMediumPeriod int
 }
 
 func NewCoin(params *ParamsNewCoin, options ...OptionCoin) *Coin {
 	deltaChange, _ := decimal.NewFromFloat64(configuration.DefaultPercentDeltaChange)
 
 	c := Coin{
-		pricesShortPeriod: priceList{
-			prices: list.New(),
-		},
-		pricesMediumPeriod: priceList{
-			prices: list.New(),
-		},
+		periodShort:  NewTimePeriod(params.MinimumPriceChangesShortPeriod),
+		periodMedium: NewTimePeriod(params.MinimumPriceChangesMediumPeriod),
 
 		secondsShortPeriod:          configuration.DefaultSecondsShortPeriod,
 		secondsMediumPeriodInterval: configuration.DefaultSecondsMediumPeriod,
@@ -73,15 +61,15 @@ func NewCoin(params *ParamsNewCoin, options ...OptionCoin) *Coin {
 }
 
 func (c *Coin) AverageMediumPeriod() (decimal.Decimal, error) {
-	c.pricesMediumPeriod.mux.Lock()
-	defer c.pricesMediumPeriod.mux.Unlock()
+	c.periodMedium.mux.Lock()
+	defer c.periodMedium.mux.Unlock()
 
-	if c.pricesMediumPeriod.prices.Len() == 0 {
+	if c.periodMedium.prices.Len() == 0 {
 		return decimal.Zero,
 			errors.New("empty")
 	}
 
-	last := c.pricesMediumPeriod.prices.Back()
+	last := c.periodMedium.prices.Back()
 
 	if last != nil && time.Since(last.Value.(Price).AtTime) < time.Duration(c.secondsMediumPeriodInterval)*time.Second {
 		return decimal.Zero,
@@ -90,12 +78,12 @@ func (c *Coin) AverageMediumPeriod() (decimal.Decimal, error) {
 
 	var sum decimal.Decimal
 
-	for e := c.pricesMediumPeriod.prices.Front(); e != nil; e = e.Next() {
+	for e := c.periodMedium.prices.Front(); e != nil; e = e.Next() {
 		sum.Add(e.Value.(Price).Value)
 	}
 
 	length, errConverasion := decimal.NewFromInt64(
-		int64(c.pricesMediumPeriod.prices.Len()),
+		int64(c.periodMedium.prices.Len()),
 		0,
 		0,
 	)
@@ -108,16 +96,16 @@ func (c *Coin) AverageMediumPeriod() (decimal.Decimal, error) {
 }
 
 func (c *Coin) isPriceChange(priceNew decimal.Decimal) error {
-	c.pricesShortPeriod.mux.Lock()
-	defer c.pricesShortPeriod.mux.Unlock()
+	c.periodShort.mux.Lock()
+	defer c.periodShort.mux.Unlock()
 
-	if c.pricesShortPeriod.prices.Front() == nil {
+	if c.periodShort.prices.Front() == nil {
 		return nil
 	}
 
 	return helpers.PriceChangeByPercent(
 		&helpers.ParamsPriceChangeByPercent{
-			PriceOld: c.pricesShortPeriod.prices.Front().Value.(Price).Value,
+			PriceOld: c.periodShort.prices.Front().Value.(Price).Value,
 			PriceNew: priceNew,
 			Delta:    c.percentDeltaChange,
 		},
@@ -129,22 +117,22 @@ func (c *Coin) AddPriceChange(price decimal.Decimal) {
 		return
 	}
 
-	c.pricesShortPeriod.mux.Lock()
+	c.periodShort.mux.Lock()
 
-	last := c.pricesShortPeriod.prices.Back()
+	last := c.periodShort.prices.Back()
 
 	if last != nil && time.Since(last.Value.(Price).AtTime) > time.Duration(c.secondsShortPeriod)*time.Second {
-		c.pricesShortPeriod.prices.Remove(last)
+		c.periodShort.prices.Remove(last)
 	}
 
-	c.pricesShortPeriod.prices.PushFront(
+	c.periodShort.prices.PushFront(
 		Price{
 			AtTime: time.Now(),
 			Value:  price,
 		},
 	)
 
-	c.pricesShortPeriod.mux.Unlock()
+	c.periodShort.mux.Unlock()
 
 	c.validatePriceChange(price)
 }
@@ -168,18 +156,32 @@ func (c *Coin) AddPriceChangesFloat(prices []float64) error {
 	return nil
 }
 
-func (c *Coin) PriceChanges() int {
-	c.mux.Lock()
-	defer c.mux.Unlock()
+func (c *Coin) getShortPeriodNoPriceChanges() int {
+	c.periodShort.mux.Lock()
+	defer c.periodShort.mux.Unlock()
 
-	return c.pricesShortPeriod.prices.Len()
+	return c.periodShort.prices.Len()
+}
+
+func (c *Coin) getMediumPeriodNoPriceChanges() int {
+	c.periodMedium.mux.Lock()
+	defer c.periodMedium.mux.Unlock()
+
+	return c.periodShort.prices.Len()
 }
 
 func (c *Coin) validatePriceChange(price decimal.Decimal) {
 	for _, strategy := range c.strategies {
+		if !strategy.IsReady() {
+
+		}
+
 		action, errStrategy := strategy.AddPriceChange(
 			&strategies.ParamsAddPriceChange{
 				PriceNow: price,
+
+				NoPriceChangesPeriodShort:  c.getShortPeriodNoPriceChanges(),
+				NoPriceChangesPeriodMedium: c.getMediumPeriodNoPriceChanges(),
 			},
 		)
 		if errStrategy != nil {
