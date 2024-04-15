@@ -41,6 +41,8 @@ func (s *StrategyDropSudden) IsReady() bool {
 
 func (s *StrategyDropSudden) SetPrice(price decimal.Decimal) {
 	s.PriceBeforeDrop = price
+
+	s.isReady = true
 }
 
 func (s *StrategyDropSudden) AddPriceChange(params *ParamsAddPriceChange) (ordering.Action, error) {

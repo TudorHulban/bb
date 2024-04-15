@@ -156,32 +156,27 @@ func (c *Coin) AddPriceChangesFloat(prices []float64) error {
 	return nil
 }
 
-func (c *Coin) getShortPeriodNoPriceChanges() int {
-	c.periodShort.mux.Lock()
-	defer c.periodShort.mux.Unlock()
-
-	return c.periodShort.prices.Len()
-}
-
-func (c *Coin) getMediumPeriodNoPriceChanges() int {
-	c.periodMedium.mux.Lock()
-	defer c.periodMedium.mux.Unlock()
-
-	return c.periodShort.prices.Len()
-}
-
 func (c *Coin) validatePriceChange(price decimal.Decimal) {
 	for _, strategy := range c.strategies {
 		if !strategy.IsReady() {
+			if c.periodMedium.Valid() {
+				periodMediumAverage, errAverage := c.periodMedium.GetPeriodAverage()
+				if errAverage != nil {
+					// TODO: log || exit
 
+					continue
+				}
+
+				strategy.SetPrice(periodMediumAverage)
+			}
 		}
 
 		action, errStrategy := strategy.AddPriceChange(
 			&strategies.ParamsAddPriceChange{
 				PriceNow: price,
 
-				NoPriceChangesPeriodShort:  c.getShortPeriodNoPriceChanges(),
-				NoPriceChangesPeriodMedium: c.getMediumPeriodNoPriceChanges(),
+				NoPriceChangesPeriodShort:  c.periodShort.GetNoPriceChanges(),
+				NoPriceChangesPeriodMedium: c.periodMedium.GetNoPriceChanges(),
 			},
 		)
 		if errStrategy != nil {
