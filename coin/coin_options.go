@@ -10,7 +10,7 @@ type OptionCoin func(*Coin)
 
 func WithPercentageDelta(delta decimal.Decimal) OptionCoin {
 	return func(c *Coin) {
-		c.percentDeltaChange = delta
+		c.percentDeltaIsPriceChange = delta
 	}
 }
 

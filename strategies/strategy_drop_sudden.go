@@ -2,11 +2,14 @@ package strategies
 
 import (
 	"errors"
+	"test/apperrors"
 	"test/helpers"
 	"test/ordering"
 
 	"github.com/govalues/decimal"
 )
+
+const nameStrategy = "Drop Sudden"
 
 type StrategyDropSudden struct {
 	PriceBeforeDrop decimal.Decimal
@@ -46,6 +49,13 @@ func (s *StrategyDropSudden) SetPrice(price decimal.Decimal) {
 }
 
 func (s *StrategyDropSudden) AddPriceChange(params *ParamsAddPriceChange) (ordering.Action, error) {
+	if !s.isReady {
+		return ordering.DoNothing,
+			apperrors.ErrorStrategyNotReady{
+				StrategyName: nameStrategy,
+			}
+	}
+
 	difference, errSubtract := s.PriceBeforeDrop.Sub(params.PriceNow)
 	if errSubtract != nil {
 		return ordering.DoNothing, errSubtract

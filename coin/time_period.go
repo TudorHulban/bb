@@ -2,7 +2,8 @@ package coin
 
 import (
 	"container/list"
-	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,17 +19,23 @@ type priceList struct {
 type timePeriod struct {
 	priceList
 
-	minimumNoPriceChanges   int
+	minimumNoPriceChanges   uint
 	minimumSecondsTimeframe uint
 }
 
-func NewTimePeriod(minimumPriceChanges int) timePeriod {
+type ParamsNewTimePeriod struct {
+	MinimumPriceChanges     uint
+	MinimumSecondsTimeframe uint
+}
+
+func NewTimePeriod(params *ParamsNewTimePeriod) timePeriod {
 	return timePeriod{
 		priceList: priceList{
 			prices: list.New(),
 		},
 
-		minimumNoPriceChanges: minimumPriceChanges,
+		minimumNoPriceChanges:   params.MinimumPriceChanges,
+		minimumSecondsTimeframe: params.MinimumSecondsTimeframe,
 	}
 }
 
@@ -36,9 +43,26 @@ func (p *timePeriod) Valid() bool {
 	p.priceList.mux.Lock()
 	defer p.priceList.mux.Unlock()
 
-	// TODO: add timeframe check
+	last := p.prices.Back()
 
-	return p.priceList.prices.Len() > p.minimumNoPriceChanges
+	if last != nil && time.Since(last.Value.(Price).AtTime) < time.Duration(p.minimumSecondsTimeframe)*time.Second {
+		return false // "period too short"
+	}
+
+	return p.priceList.prices.Len() > int(p.minimumNoPriceChanges)
+}
+
+func (p timePeriod) String() string {
+	return strings.Join(
+		[]string{
+			"TimePeriod:",
+			fmt.Sprintf("Valid: %t", p.Valid()),
+			fmt.Sprintf("Number Price Changes: %d", p.GetNoPriceChanges()),
+			fmt.Sprintf("Period Average: %s", p.GetPeriodAverage().String()),
+			fmt.Sprintf("Values: %s", p.getPeriodValues().String()),
+		},
+		"\n",
+	)
 }
 
 func (p *timePeriod) GetNoPriceChanges() int {
@@ -48,21 +72,28 @@ func (p *timePeriod) GetNoPriceChanges() int {
 	return p.prices.Len()
 }
 
-func (p *timePeriod) GetPeriodAverage() (decimal.Decimal, error) {
+func (p *timePeriod) getPeriodValues() DecimalValues {
 	p.mux.Lock()
 	defer p.mux.Unlock()
 
-	if p.prices.Len() == 0 {
-		return decimal.Zero,
-			errors.New("empty")
+	var result []decimal.Decimal
+
+	for e := p.prices.Front(); e != nil; e = e.Next() {
+		result = append(result,
+			e.Value.(Price).Value,
+		)
 	}
 
-	last := p.prices.Back()
+	return result
+}
 
-	if last != nil && time.Since(last.Value.(Price).AtTime) < time.Duration(p.minimumSecondsTimeframe)*time.Second {
-		return decimal.Zero,
-			errors.New("medium period too short")
+func (p *timePeriod) GetPeriodAverage() decimal.Decimal {
+	if !p.Valid() {
+		return decimal.Zero
 	}
+
+	p.mux.Lock()
+	defer p.mux.Unlock()
 
 	var sum decimal.Decimal
 
@@ -70,15 +101,23 @@ func (p *timePeriod) GetPeriodAverage() (decimal.Decimal, error) {
 		sum.Add(e.Value.(Price).Value)
 	}
 
-	length, errConverasion := decimal.NewFromInt64(
+	length, errConversion := decimal.NewFromInt64(
 		int64(p.prices.Len()),
 		0,
 		0,
 	)
-	if errConverasion != nil {
-		return decimal.Zero,
-			errConverasion
+	if errConversion != nil {
+		fmt.Println(errConversion)
+
+		return decimal.Zero
 	}
 
-	return sum.Quo(length)
+	average, errAverage := sum.Quo(length)
+	if errAverage != nil {
+		fmt.Println(errAverage)
+
+		return decimal.Zero
+	}
+
+	return average
 }

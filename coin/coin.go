@@ -1,14 +1,14 @@
 package coin
 
 import (
-	"errors"
-	"fmt"
+	"test/apperrors"
 	"test/configuration"
 	"test/helpers"
 	"test/ordering"
 	"test/strategies"
 	"time"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/govalues/decimal"
 )
 
@@ -23,11 +23,8 @@ type Coin struct {
 	periodShort  timePeriod
 	periodMedium timePeriod
 
-	secondsShortPeriod          uint
-	secondsMediumPeriodInterval uint
-
-	percentDeltaChange decimal.Decimal
-	currentQuantity    decimal.Decimal
+	percentDeltaIsPriceChange decimal.Decimal
+	currentQuantity           decimal.Decimal
 
 	strategies []strategies.IStrategy
 }
@@ -35,20 +32,35 @@ type Coin struct {
 type ParamsNewCoin struct {
 	Ordering ordering.IOrdering
 
-	MinimumPriceChangesShortPeriod  int
-	MinimumPriceChangesMediumPeriod int
+	MinimumPriceChangesShortPeriod  uint `valid:"required"`
+	MinimumPriceChangesMediumPeriod uint `valid:"required"`
+
+	MinimumSecondsTimeframeShort  uint `valid:"required"`
+	MinimumSecondsTimeframeMedium uint `valid:"required"`
 }
 
-func NewCoin(params *ParamsNewCoin, options ...OptionCoin) *Coin {
-	deltaChange, _ := decimal.NewFromFloat64(configuration.DefaultPercentDeltaChange)
+func NewCoin(params *ParamsNewCoin, options ...OptionCoin) (*Coin, error) {
+	if _, errVa := govalidator.ValidateStruct(params); errVa != nil {
+		return nil,
+			apperrors.ErrServiceValidation{
+				Caller: "NewCoin",
+				Issue:  errVa,
+			}
+	}
+
+	deltaChange, _ := decimal.NewFromFloat64(configuration.DefaultPercentDeltaIsPriceChange)
 
 	c := Coin{
-		periodShort:  NewTimePeriod(params.MinimumPriceChangesShortPeriod),
-		periodMedium: NewTimePeriod(params.MinimumPriceChangesMediumPeriod),
+		periodShort: NewTimePeriod(&ParamsNewTimePeriod{
+			MinimumPriceChanges:     params.MinimumPriceChangesShortPeriod,
+			MinimumSecondsTimeframe: params.MinimumSecondsTimeframeShort,
+		}),
+		periodMedium: NewTimePeriod(&ParamsNewTimePeriod{
+			MinimumPriceChanges:     params.MinimumPriceChangesMediumPeriod,
+			MinimumSecondsTimeframe: params.MinimumPriceChangesShortPeriod,
+		}),
 
-		secondsShortPeriod:          configuration.DefaultSecondsShortPeriod,
-		secondsMediumPeriodInterval: configuration.DefaultSecondsMediumPeriod,
-		percentDeltaChange:          deltaChange,
+		percentDeltaIsPriceChange: deltaChange,
 
 		ordering: params.Ordering,
 	}
@@ -57,42 +69,7 @@ func NewCoin(params *ParamsNewCoin, options ...OptionCoin) *Coin {
 		option(&c)
 	}
 
-	return &c
-}
-
-func (c *Coin) AverageMediumPeriod() (decimal.Decimal, error) {
-	c.periodMedium.mux.Lock()
-	defer c.periodMedium.mux.Unlock()
-
-	if c.periodMedium.prices.Len() == 0 {
-		return decimal.Zero,
-			errors.New("empty")
-	}
-
-	last := c.periodMedium.prices.Back()
-
-	if last != nil && time.Since(last.Value.(Price).AtTime) < time.Duration(c.secondsMediumPeriodInterval)*time.Second {
-		return decimal.Zero,
-			errors.New("medium period too short")
-	}
-
-	var sum decimal.Decimal
-
-	for e := c.periodMedium.prices.Front(); e != nil; e = e.Next() {
-		sum.Add(e.Value.(Price).Value)
-	}
-
-	length, errConverasion := decimal.NewFromInt64(
-		int64(c.periodMedium.prices.Len()),
-		0,
-		0,
-	)
-	if errConverasion != nil {
-		return decimal.Zero,
-			errConverasion
-	}
-
-	return sum.Quo(length)
+	return &c, nil
 }
 
 func (c *Coin) isPriceChange(priceNew decimal.Decimal) error {
@@ -107,7 +84,7 @@ func (c *Coin) isPriceChange(priceNew decimal.Decimal) error {
 		&helpers.ParamsPriceChangeByPercent{
 			PriceOld: c.periodShort.prices.Front().Value.(Price).Value,
 			PriceNew: priceNew,
-			Delta:    c.percentDeltaChange,
+			Delta:    c.percentDeltaIsPriceChange,
 		},
 	)
 }
@@ -121,7 +98,7 @@ func (c *Coin) AddPriceChange(price decimal.Decimal) {
 
 	last := c.periodShort.prices.Back()
 
-	if last != nil && time.Since(last.Value.(Price).AtTime) > time.Duration(c.secondsShortPeriod)*time.Second {
+	if last != nil && time.Since(last.Value.(Price).AtTime) > time.Duration(c.periodShort.minimumSecondsTimeframe)*time.Second {
 		c.periodShort.prices.Remove(last)
 	}
 
@@ -154,40 +131,4 @@ func (c *Coin) AddPriceChangesFloat(prices []float64) error {
 	}
 
 	return nil
-}
-
-func (c *Coin) validatePriceChange(price decimal.Decimal) {
-	for _, strategy := range c.strategies {
-		if !strategy.IsReady() {
-			if c.periodMedium.Valid() {
-				periodMediumAverage, errAverage := c.periodMedium.GetPeriodAverage()
-				if errAverage != nil {
-					// TODO: log || exit
-
-					continue
-				}
-
-				strategy.SetPrice(periodMediumAverage)
-			}
-		}
-
-		action, errStrategy := strategy.AddPriceChange(
-			&strategies.ParamsAddPriceChange{
-				PriceNow: price,
-
-				NoPriceChangesPeriodShort:  c.periodShort.GetNoPriceChanges(),
-				NoPriceChangesPeriodMedium: c.periodMedium.GetNoPriceChanges(),
-			},
-		)
-		if errStrategy != nil {
-			fmt.Println(errStrategy)
-		}
-		if action != ordering.DoNothing {
-			fmt.Printf(
-				"%s at %s.\n",
-				action,
-				price,
-			)
-		}
-	}
 }

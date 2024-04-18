@@ -3,6 +3,7 @@ module test
 go 1.21.6
 
 require (
+	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
 	github.com/govalues/decimal v0.1.23
 	github.com/stretchr/testify v1.9.0
 )

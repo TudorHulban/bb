@@ -9,11 +9,12 @@ import (
 )
 
 func TestCoin(t *testing.T) {
-	c := NewCoin(
+	c, errCr := NewCoin(
 		&ParamsNewCoin{
 			Ordering: ordering.NewOrderingLogOnly(),
 		},
 	)
+	require.NoError(t, errCr)
 	require.NotNil(t, c)
 
 	c.AddPriceChange(decimal.One)
@@ -38,11 +39,12 @@ func BenchmarkCoinPriceChange(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	c := NewCoin(
+	c, errCr := NewCoin(
 		&ParamsNewCoin{
 			Ordering: ordering.NewOrderingLogOnly(),
 		},
 	)
+	require.NoError(b, errCr)
 
 	c.AddPriceChange(decimal.One)
 
