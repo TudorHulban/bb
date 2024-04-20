@@ -179,6 +179,7 @@ func (p timePeriod) String() string {
 
 	return strings.Join(
 		[]string{
+			"",
 			"TimePeriod:",
 			fmt.Sprintf("Valid: %s", validity),
 			fmt.Sprintf("Minimum number Price Changes: %d", p.minimumNoPriceChanges),

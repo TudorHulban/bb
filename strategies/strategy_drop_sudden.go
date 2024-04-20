@@ -16,8 +16,6 @@ const nameStrategy = "Drop Sudden"
 type StrategyDropSudden struct {
 	PriceBeforeDrop decimal.Decimal
 	DropPercent     decimal.Decimal
-
-	isReady bool
 }
 
 type ParamsNewStrategyDropSudden struct {
@@ -25,39 +23,34 @@ type ParamsNewStrategyDropSudden struct {
 	DropPercent     decimal.Decimal
 }
 
-func NewStrategyDropSudden(params ParamsNewStrategyDropSudden) *StrategyDropSudden {
-	// TODO: add input validation
-
-	s := StrategyDropSudden{
-		PriceBeforeDrop: params.PriceBeforeDrop,
-		DropPercent:     params.DropPercent,
-	}
-
-	if params.PriceBeforeDrop.IsPos() {
-		s.isReady = true
-	}
-
-	return &s
-}
-
-func (s *StrategyDropSudden) IsReady() bool {
-	return s.isReady
-}
-
-func (s *StrategyDropSudden) SetPrice(price decimal.Decimal) {
-	s.PriceBeforeDrop = price
-
-	s.isReady = true
-}
-
-func (s *StrategyDropSudden) AddPriceChange(params *ParamsAddPriceChange) (ordering.Action, error) {
-	if !s.isReady {
-		return ordering.DoNothing,
-			apperrors.ErrorStrategyNotReady{
-				StrategyName: nameStrategy,
+func NewStrategyDropSudden(params ParamsNewStrategyDropSudden) (*StrategyDropSudden, error) {
+	if !params.DropPercent.IsPos() {
+		return nil,
+			apperrors.ErrorInvalidInput{
+				InputName: "DropPercent",
 			}
 	}
 
+	return &StrategyDropSudden{
+			PriceBeforeDrop: params.PriceBeforeDrop,
+			DropPercent:     params.DropPercent,
+		},
+		nil
+}
+
+func (s *StrategyDropSudden) SetPrice(price decimal.Decimal) error {
+	if !price.IsPos() {
+		return apperrors.ErrorInvalidInput{
+			InputName: "SetPrice",
+		}
+	}
+
+	s.PriceBeforeDrop = price
+
+	return nil
+}
+
+func (s *StrategyDropSudden) AddPriceChange(params *ParamsAddPriceChange) (ordering.Action, error) {
 	difference, errSubtract := s.PriceBeforeDrop.Sub(params.PriceNow)
 	if errSubtract != nil {
 		return ordering.DoNothing, errSubtract
@@ -87,9 +80,8 @@ func (s StrategyDropSudden) String() string {
 		[]string{
 			"",
 			fmt.Sprintf("Strategy %s", nameStrategy),
-			fmt.Sprintf("is ready: %t", s.isReady),
-			fmt.Sprintf("drop percent: %s", s.DropPercent.String()),
-			fmt.Sprintf("current price before drop: %s", s.PriceBeforeDrop.String()),
+			fmt.Sprintf("drop percent: %s%%.", s.DropPercent.String()),
+			fmt.Sprintf("current price before drop: %s.", s.PriceBeforeDrop.String()),
 			"",
 		},
 		"\n",

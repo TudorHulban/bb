@@ -14,6 +14,13 @@ func TestStrategyDropSudden(t *testing.T) {
 	dropPercent, errDrop := decimal.NewFromFloat64(20.)
 	require.NoError(t, errDrop)
 
+	strategyDropSudden, errCr := strategies.NewStrategyDropSudden(
+		strategies.ParamsNewStrategyDropSudden{
+			DropPercent: dropPercent,
+		},
+	)
+	require.NoError(t, errCr)
+
 	c, errCr := NewCoin(
 		&ParamsNewCoin{
 			Ordering: ordering.NewOrderingLogOnly(),
@@ -23,17 +30,13 @@ func TestStrategyDropSudden(t *testing.T) {
 		},
 
 		WithStrategy(
-			strategies.NewStrategyDropSudden(
-				strategies.ParamsNewStrategyDropSudden{
-					DropPercent: dropPercent,
-				},
-			),
+			strategyDropSudden,
 		),
 	)
 	require.NoError(t, errCr)
 	require.NotNil(t, c)
 
-	priceChanges1 := []float64{1., 1.2, 1., .5, .4}
+	priceChanges1 := []float64{1., 1.2, 1., .5}
 	require.NoError(t,
 		c.AddPriceChangesFloat(
 			priceChanges1,

@@ -7,8 +7,7 @@ import (
 )
 
 type IStrategy interface {
-	IsReady() bool
-	SetPrice(price decimal.Decimal)
+	SetPrice(price decimal.Decimal) error
 	AddPriceChange(params *ParamsAddPriceChange) (ordering.Action, error)
 }
 

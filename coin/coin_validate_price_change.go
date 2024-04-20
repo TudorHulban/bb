@@ -10,14 +10,12 @@ import (
 
 func (c *Coin) validatePriceChange(price decimal.Decimal) {
 	for _, strategy := range c.strategies {
-		if !strategy.IsReady() {
-			periodMediumAverage := c.periodMedium.GetPeriodAverage()
-			if periodMediumAverage == decimal.Zero {
-				continue
-			}
-
-			strategy.SetPrice(periodMediumAverage)
+		periodMediumAverage := c.periodMedium.GetPeriodAverage()
+		if periodMediumAverage == decimal.Zero {
+			continue
 		}
+
+		strategy.SetPrice(periodMediumAverage)
 
 		fmt.Println(strategy)
 
