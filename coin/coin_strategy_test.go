@@ -5,6 +5,7 @@ import (
 	"test/ordering"
 	"test/strategies"
 	"testing"
+	"time"
 
 	"github.com/govalues/decimal"
 	"github.com/stretchr/testify/require"
@@ -27,6 +28,8 @@ func TestStrategyDropSudden(t *testing.T) {
 
 			MinimumPriceChangesMediumPeriod: 1,
 			MinimumPriceChangesShortPeriod:  1,
+
+			DefaultQuantityBuy: 1,
 		},
 
 		WithStrategy(
@@ -36,7 +39,7 @@ func TestStrategyDropSudden(t *testing.T) {
 	require.NoError(t, errCr)
 	require.NotNil(t, c)
 
-	priceChanges1 := []float64{1., 1.2, 1., .5}
+	priceChanges1 := []float64{1., 1.2, 1., .5, .4}
 	require.NoError(t,
 		c.AddPriceChangesFloat(
 			priceChanges1,
@@ -59,4 +62,8 @@ func TestStrategyDropSudden(t *testing.T) {
 		c.periodMedium.GetNoPriceChanges(),
 		"periodMedium price changes",
 	)
+
+	time.Sleep(2 * time.Second)
+
+	fmt.Println(c.currentQuantity.Load())
 }

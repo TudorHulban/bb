@@ -1,6 +1,7 @@
 package coin
 
 import (
+	"sync/atomic"
 	"test/apperrors"
 	"test/configuration"
 	"test/helpers"
@@ -20,20 +21,26 @@ type Price struct {
 type Coin struct {
 	ordering ordering.IOrdering
 
+	code configuration.CoinCODE
+
 	periodShort  timePeriod
 	periodMedium timePeriod
 
 	percentDeltaIsPriceChange decimal.Decimal
-	currentQuantity           decimal.Decimal
+	defaultQuantityBuy        uint32
+	currentQuantity           atomic.Uint32
 
 	strategies []strategies.IStrategy
 }
 
 type ParamsNewCoin struct {
 	Ordering ordering.IOrdering
+	Code     configuration.CoinCODE
 
 	MinimumPriceChangesShortPeriod  uint32 `valid:"required"`
 	MinimumPriceChangesMediumPeriod uint32 `valid:"required"`
+
+	DefaultQuantityBuy uint32 `valid:"required"`
 
 	MinimumDurationTimeframeShort  time.Duration
 	MinimumDurationTimeframeMedium time.Duration
@@ -52,6 +59,9 @@ func NewCoin(params *ParamsNewCoin, options ...OptionCoin) (*Coin, error) {
 	deltaChange, _ := decimal.NewFromFloat64(configuration.DefaultPercentDeltaIsPriceChange)
 
 	c := Coin{
+		code:               params.Code,
+		defaultQuantityBuy: params.DefaultQuantityBuy,
+
 		periodShort: NewTimePeriod(
 			&ParamsNewTimePeriod{
 				name:                     namePeriodShort,

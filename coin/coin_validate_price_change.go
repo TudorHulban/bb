@@ -41,5 +41,33 @@ func (c *Coin) validatePriceChange(price decimal.Decimal) {
 				price,
 			)
 		}
+
+		if action == ordering.Buy {
+			if c.currentQuantity.Load() == 0 {
+				go func() {
+					if !strategy.CanPlaceOrder() {
+						return
+					}
+
+					strategy.IncrementSimultaneousOrders()
+					defer strategy.DecrementSimultaneousOrders()
+
+					if errBuy := c.ordering.Buy(
+						ordering.ParamsOder{
+							Code:     c.code,
+							Quantity: c.defaultQuantityBuy,
+						},
+					); errBuy != nil {
+						fmt.Println(errBuy)
+
+						return
+					}
+
+					c.currentQuantity.Add(
+						c.defaultQuantityBuy,
+					)
+				}()
+			}
+		}
 	}
 }
