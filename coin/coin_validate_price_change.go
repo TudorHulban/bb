@@ -11,25 +11,15 @@ import (
 func (c *Coin) validatePriceChange(price decimal.Decimal) {
 	for _, strategy := range c.strategies {
 		if !strategy.IsReady() {
-			fmt.Println("xxxxxxxxxxxxx", strategy.IsReady())
-
-			if errPeriodMedium := c.periodMedium.Valid(); errPeriodMedium != nil {
-				fmt.Println(errPeriodMedium)
-
-				periodMediumAverage := c.periodMedium.GetPeriodAverage()
-				if periodMediumAverage == decimal.Zero {
-					continue
-				}
-
-				strategy.SetPrice(periodMediumAverage)
-
+			periodMediumAverage := c.periodMedium.GetPeriodAverage()
+			if periodMediumAverage == decimal.Zero {
 				continue
 			}
 
-			c.periodMedium.AddPriceChange(price)
-
-			continue
+			strategy.SetPrice(periodMediumAverage)
 		}
+
+		fmt.Println(strategy)
 
 		action, errStrategy := strategy.AddPriceChange(
 			&strategies.ParamsAddPriceChange{
@@ -40,11 +30,15 @@ func (c *Coin) validatePriceChange(price decimal.Decimal) {
 			},
 		)
 		if errStrategy != nil {
-			fmt.Println(errStrategy)
+			fmt.Printf(
+				"validatePriceChange: %s for %s.\n",
+				errStrategy.Error(),
+				price.String(),
+			)
 		}
 		if action != ordering.DoNothing {
 			fmt.Printf(
-				"%s at %s.\n",
+				"validatePriceChange: %s at %s.\n",
 				action,
 				price,
 			)

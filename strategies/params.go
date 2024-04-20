@@ -6,6 +6,6 @@ type ParamsAddPriceChange struct {
 	AverageMediumPeriodPrice decimal.Decimal
 	PriceNow                 decimal.Decimal
 
-	NoPriceChangesPeriodShort  int
-	NoPriceChangesPeriodMedium int
+	NoPriceChangesPeriodShort  uint32
+	NoPriceChangesPeriodMedium uint32
 }

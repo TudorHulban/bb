@@ -2,6 +2,8 @@ package strategies
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"test/apperrors"
 	"test/helpers"
 	"test/ordering"
@@ -62,7 +64,8 @@ func (s *StrategyDropSudden) AddPriceChange(params *ParamsAddPriceChange) (order
 	}
 
 	if difference == decimal.Zero {
-		return ordering.DoNothing, errors.New("no price change")
+		return ordering.DoNothing,
+			errors.New("no price change")
 	}
 
 	if errPercent := helpers.PriceChangeByPercent(
@@ -72,8 +75,23 @@ func (s *StrategyDropSudden) AddPriceChange(params *ParamsAddPriceChange) (order
 			Delta:    s.DropPercent,
 		},
 	); errPercent != nil {
-		return ordering.DoNothing, errors.New("no sudden drop")
+		return ordering.DoNothing,
+			errors.New("no sudden drop")
 	}
 
 	return ordering.Buy, nil
+}
+
+func (s StrategyDropSudden) String() string {
+	return strings.Join(
+		[]string{
+			"",
+			fmt.Sprintf("Strategy %s", nameStrategy),
+			fmt.Sprintf("is ready: %t", s.isReady),
+			fmt.Sprintf("drop percent: %s", s.DropPercent.String()),
+			fmt.Sprintf("current price before drop: %s", s.PriceBeforeDrop.String()),
+			"",
+		},
+		"\n",
+	)
 }

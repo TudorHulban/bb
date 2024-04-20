@@ -2,14 +2,14 @@ package apperrors
 
 import "fmt"
 
-type ErrServiceValidation struct {
+type ErrValidation struct {
 	Issue  error
 	Caller string
 }
 
-const areaErrServiceValidation = "Service-Validation"
+const areaErrServiceValidation = "Validation"
 
-func (e ErrServiceValidation) Error() string {
+func (e ErrValidation) Error() string {
 	var res [3]string
 
 	res[0] = fmt.Sprintf("Area: %s", areaErrServiceValidation)

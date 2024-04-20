@@ -12,8 +12,7 @@ import (
 func TestTimePeriod(t *testing.T) {
 	p := NewTimePeriod(
 		&ParamsNewTimePeriod{
-			MinimumPriceChanges:      1,
-			minimumDurationTimeframe: time.Duration(10) * time.Millisecond,
+			MinimumPriceChanges: 1,
 		},
 	)
 	require.NotZero(t, p)

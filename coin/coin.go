@@ -32,17 +32,18 @@ type Coin struct {
 type ParamsNewCoin struct {
 	Ordering ordering.IOrdering
 
-	MinimumPriceChangesShortPeriod  uint `valid:"required"`
-	MinimumPriceChangesMediumPeriod uint `valid:"required"`
+	MinimumPriceChangesShortPeriod  uint32 `valid:"required"`
+	MinimumPriceChangesMediumPeriod uint32 `valid:"required"`
 
-	MinimumSecondsTimeframeShort  uint `valid:"required"`
-	MinimumSecondsTimeframeMedium uint `valid:"required"`
+	MinimumDurationTimeframeShort  time.Duration
+	MinimumDurationTimeframeMedium time.Duration
 }
 
+// NewCoin - if minimum duration is zero, no deletion would occur for old element.
 func NewCoin(params *ParamsNewCoin, options ...OptionCoin) (*Coin, error) {
 	if _, errVa := govalidator.ValidateStruct(params); errVa != nil {
 		return nil,
-			apperrors.ErrServiceValidation{
+			apperrors.ErrValidation{
 				Caller: "NewCoin",
 				Issue:  errVa,
 			}
@@ -53,14 +54,16 @@ func NewCoin(params *ParamsNewCoin, options ...OptionCoin) (*Coin, error) {
 	c := Coin{
 		periodShort: NewTimePeriod(
 			&ParamsNewTimePeriod{
+				name:                     namePeriodShort,
 				MinimumPriceChanges:      params.MinimumPriceChangesShortPeriod,
-				minimumDurationTimeframe: time.Duration(params.MinimumSecondsTimeframeShort) * time.Second,
+				minimumDurationTimeframe: params.MinimumDurationTimeframeShort,
 			},
 		),
 		periodMedium: NewTimePeriod(
 			&ParamsNewTimePeriod{
+				name:                     namePeriodMedium,
 				MinimumPriceChanges:      params.MinimumPriceChangesMediumPeriod,
-				minimumDurationTimeframe: time.Duration(params.MinimumSecondsTimeframeMedium) * time.Second,
+				minimumDurationTimeframe: params.MinimumDurationTimeframeMedium,
 			},
 		),
 

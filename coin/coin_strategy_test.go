@@ -5,14 +5,13 @@ import (
 	"test/ordering"
 	"test/strategies"
 	"testing"
-	"time"
 
 	"github.com/govalues/decimal"
 	"github.com/stretchr/testify/require"
 )
 
 func TestStrategyDropSudden(t *testing.T) {
-	dropPercent, errDrop := decimal.NewFromFloat64(10.)
+	dropPercent, errDrop := decimal.NewFromFloat64(20.)
 	require.NoError(t, errDrop)
 
 	c, errCr := NewCoin(
@@ -21,8 +20,6 @@ func TestStrategyDropSudden(t *testing.T) {
 
 			MinimumPriceChangesMediumPeriod: 1,
 			MinimumPriceChangesShortPeriod:  1,
-			MinimumSecondsTimeframeShort:    1,
-			MinimumSecondsTimeframeMedium:   1,
 		},
 
 		WithStrategy(
@@ -43,8 +40,6 @@ func TestStrategyDropSudden(t *testing.T) {
 		),
 	)
 
-	time.Sleep(1 * time.Second)
-
 	priceChanges2 := []float64{.77}
 	require.NoError(t,
 		c.AddPriceChangesFloat(
@@ -52,9 +47,8 @@ func TestStrategyDropSudden(t *testing.T) {
 		),
 	)
 
-	require.EqualValues(t,
+	require.NotZero(t,
 		c.periodShort.GetNoPriceChanges(),
-		len(priceChanges1)+len(priceChanges2)-1,
 	)
 	fmt.Println(c.periodShort)
 

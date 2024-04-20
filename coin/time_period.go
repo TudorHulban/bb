@@ -2,10 +2,11 @@ package coin
 
 import (
 	"container/list"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"test/apperrors"
 	"time"
 
 	"github.com/govalues/decimal"
@@ -20,12 +21,18 @@ type priceList struct {
 type timePeriod struct {
 	priceList
 
-	minimumNoPriceChanges    uint
+	name string
+
+	noPriceChanges atomic.Uint32
+
+	minimumNoPriceChanges    uint32
 	minimumDurationTimeframe time.Duration
 }
 
 type ParamsNewTimePeriod struct {
-	MinimumPriceChanges      uint
+	name string
+
+	MinimumPriceChanges      uint32
 	minimumDurationTimeframe time.Duration
 }
 
@@ -37,16 +44,20 @@ func NewTimePeriod(params *ParamsNewTimePeriod) timePeriod {
 
 		minimumNoPriceChanges:    params.MinimumPriceChanges,
 		minimumDurationTimeframe: params.minimumDurationTimeframe,
+
+		name: params.name,
 	}
 }
 
 func (p *timePeriod) AddPriceChange(price decimal.Decimal) {
 	p.mux.Lock()
 
-	last := p.prices.Back()
+	if p.minimumDurationTimeframe != 0 {
+		last := p.prices.Back()
 
-	if last != nil && time.Since(last.Value.(Price).AtTime) > p.minimumDurationTimeframe {
-		p.prices.Remove(last)
+		if last != nil && time.Since(last.Value.(Price).AtTime) > p.minimumDurationTimeframe {
+			p.prices.Remove(last)
+		}
 	}
 
 	p.prices.PushFront(
@@ -56,14 +67,13 @@ func (p *timePeriod) AddPriceChange(price decimal.Decimal) {
 		},
 	)
 
+	p.noPriceChanges.Add(1)
+
 	p.mux.Unlock()
 }
 
-func (p *timePeriod) GetNoPriceChanges() int {
-	p.mux.Lock()
-	defer p.mux.Unlock()
-
-	return p.prices.Len()
+func (p *timePeriod) GetNoPriceChanges() uint32 {
+	return p.noPriceChanges.Load()
 }
 
 func (p *timePeriod) getPeriodValues() DecimalValues {
@@ -131,15 +141,27 @@ func (p *timePeriod) Valid() error {
 
 	last := p.prices.Back()
 
-	if last != nil && time.Since(last.Value.(Price).AtTime) < p.minimumDurationTimeframe {
-		return errors.New("period too short")
+	timeSinceLastValue := time.Since(last.Value.(Price).AtTime)
+
+	if last != nil && timeSinceLastValue < p.minimumDurationTimeframe {
+		return apperrors.ErrValidation{
+			Issue: fmt.Errorf(
+				"period %s too short (%d), minimum %d",
+				p.name,
+				timeSinceLastValue,
+				p.minimumDurationTimeframe,
+			),
+
+			Caller: "timePeriod - Valid",
+		}
 	}
 
 	numberPriceChanges := p.priceList.prices.Len()
 
 	if numberPriceChanges < int(p.minimumNoPriceChanges) {
 		return fmt.Errorf(
-			"current number of price changes (%d) smaller than minimum number of price changes (%d)",
+			"%s: current number of price changes (%d) smaller than minimum number of price changes (%d)",
+			p.name,
 			numberPriceChanges,
 			p.minimumNoPriceChanges,
 		)
