@@ -11,16 +11,22 @@ import (
 func (c *Coin) validatePriceChange(price decimal.Decimal) {
 	for _, strategy := range c.strategies {
 		if !strategy.IsReady() {
-			// fmt.Println("xxxxxxxxxxxxxx", c.periodMedium)
+			fmt.Println("xxxxxxxxxxxxx", strategy.IsReady())
 
-			if c.periodMedium.Valid() {
+			if errPeriodMedium := c.periodMedium.Valid(); errPeriodMedium != nil {
+				fmt.Println(errPeriodMedium)
+
 				periodMediumAverage := c.periodMedium.GetPeriodAverage()
 				if periodMediumAverage == decimal.Zero {
 					continue
 				}
 
 				strategy.SetPrice(periodMediumAverage)
+
+				continue
 			}
+
+			c.periodMedium.AddPriceChange(price)
 
 			continue
 		}

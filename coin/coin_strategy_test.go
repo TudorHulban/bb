@@ -36,7 +36,7 @@ func TestStrategyDropSudden(t *testing.T) {
 	require.NoError(t, errCr)
 	require.NotNil(t, c)
 
-	priceChanges1 := []float64{1., 1.2, 1., .5}
+	priceChanges1 := []float64{1., 1.2, 1., .5, .4}
 	require.NoError(t,
 		c.AddPriceChangesFloat(
 			priceChanges1,

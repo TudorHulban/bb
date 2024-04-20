@@ -51,14 +51,18 @@ func NewCoin(params *ParamsNewCoin, options ...OptionCoin) (*Coin, error) {
 	deltaChange, _ := decimal.NewFromFloat64(configuration.DefaultPercentDeltaIsPriceChange)
 
 	c := Coin{
-		periodShort: NewTimePeriod(&ParamsNewTimePeriod{
-			MinimumPriceChanges:     params.MinimumPriceChangesShortPeriod,
-			MinimumSecondsTimeframe: params.MinimumSecondsTimeframeShort,
-		}),
-		periodMedium: NewTimePeriod(&ParamsNewTimePeriod{
-			MinimumPriceChanges:     params.MinimumPriceChangesMediumPeriod,
-			MinimumSecondsTimeframe: params.MinimumPriceChangesShortPeriod,
-		}),
+		periodShort: NewTimePeriod(
+			&ParamsNewTimePeriod{
+				MinimumPriceChanges:      params.MinimumPriceChangesShortPeriod,
+				minimumDurationTimeframe: time.Duration(params.MinimumSecondsTimeframeShort) * time.Second,
+			},
+		),
+		periodMedium: NewTimePeriod(
+			&ParamsNewTimePeriod{
+				MinimumPriceChanges:      params.MinimumPriceChangesMediumPeriod,
+				minimumDurationTimeframe: time.Duration(params.MinimumSecondsTimeframeMedium) * time.Second,
+			},
+		),
 
 		percentDeltaIsPriceChange: deltaChange,
 
@@ -94,22 +98,8 @@ func (c *Coin) AddPriceChange(price decimal.Decimal) {
 		return
 	}
 
-	c.periodShort.mux.Lock()
-
-	last := c.periodShort.prices.Back()
-
-	if last != nil && time.Since(last.Value.(Price).AtTime) > time.Duration(c.periodShort.minimumSecondsTimeframe)*time.Second {
-		c.periodShort.prices.Remove(last)
-	}
-
-	c.periodShort.prices.PushFront(
-		Price{
-			AtTime: time.Now(),
-			Value:  price,
-		},
-	)
-
-	c.periodShort.mux.Unlock()
+	c.periodShort.AddPriceChange(price)
+	c.periodMedium.AddPriceChange(price)
 
 	c.validatePriceChange(price)
 }

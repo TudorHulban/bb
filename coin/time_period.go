@@ -2,6 +2,7 @@ package coin
 
 import (
 	"container/list"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -19,13 +20,13 @@ type priceList struct {
 type timePeriod struct {
 	priceList
 
-	minimumNoPriceChanges   uint
-	minimumSecondsTimeframe uint
+	minimumNoPriceChanges    uint
+	minimumDurationTimeframe time.Duration
 }
 
 type ParamsNewTimePeriod struct {
-	MinimumPriceChanges     uint
-	MinimumSecondsTimeframe uint
+	MinimumPriceChanges      uint
+	minimumDurationTimeframe time.Duration
 }
 
 func NewTimePeriod(params *ParamsNewTimePeriod) timePeriod {
@@ -34,35 +35,28 @@ func NewTimePeriod(params *ParamsNewTimePeriod) timePeriod {
 			prices: list.New(),
 		},
 
-		minimumNoPriceChanges:   params.MinimumPriceChanges,
-		minimumSecondsTimeframe: params.MinimumSecondsTimeframe,
+		minimumNoPriceChanges:    params.MinimumPriceChanges,
+		minimumDurationTimeframe: params.minimumDurationTimeframe,
 	}
 }
 
-func (p *timePeriod) Valid() bool {
-	p.priceList.mux.Lock()
-	defer p.priceList.mux.Unlock()
+func (p *timePeriod) AddPriceChange(price decimal.Decimal) {
+	p.mux.Lock()
 
 	last := p.prices.Back()
 
-	if last != nil && time.Since(last.Value.(Price).AtTime) < time.Duration(p.minimumSecondsTimeframe)*time.Second {
-		return false // "period too short"
+	if last != nil && time.Since(last.Value.(Price).AtTime) > p.minimumDurationTimeframe {
+		p.prices.Remove(last)
 	}
 
-	return p.priceList.prices.Len() > int(p.minimumNoPriceChanges)
-}
-
-func (p timePeriod) String() string {
-	return strings.Join(
-		[]string{
-			"TimePeriod:",
-			fmt.Sprintf("Valid: %t", p.Valid()),
-			fmt.Sprintf("Number Price Changes: %d", p.GetNoPriceChanges()),
-			fmt.Sprintf("Period Average: %s", p.GetPeriodAverage().String()),
-			fmt.Sprintf("Values: %s", p.getPeriodValues().String()),
+	p.prices.PushFront(
+		Price{
+			AtTime: time.Now(),
+			Value:  price,
 		},
-		"\n",
 	)
+
+	p.mux.Unlock()
 }
 
 func (p *timePeriod) GetNoPriceChanges() int {
@@ -88,7 +82,9 @@ func (p *timePeriod) getPeriodValues() DecimalValues {
 }
 
 func (p *timePeriod) GetPeriodAverage() decimal.Decimal {
-	if !p.Valid() {
+	if errPeriodValid := p.Valid(); errPeriodValid != nil {
+		fmt.Println(errPeriodValid)
+
 		return decimal.Zero
 	}
 
@@ -98,7 +94,14 @@ func (p *timePeriod) GetPeriodAverage() decimal.Decimal {
 	var sum decimal.Decimal
 
 	for e := p.prices.Front(); e != nil; e = e.Next() {
-		sum.Add(e.Value.(Price).Value)
+		var errSum error
+
+		sum, errSum = sum.Add(e.Value.(Price).Value)
+		if errSum != nil {
+			fmt.Println(errSum)
+
+			return decimal.Zero
+		}
 	}
 
 	length, errConversion := decimal.NewFromInt64(
@@ -120,4 +123,47 @@ func (p *timePeriod) GetPeriodAverage() decimal.Decimal {
 	}
 
 	return average
+}
+
+func (p *timePeriod) Valid() error {
+	p.priceList.mux.Lock()
+	defer p.priceList.mux.Unlock()
+
+	last := p.prices.Back()
+
+	if last != nil && time.Since(last.Value.(Price).AtTime) < p.minimumDurationTimeframe {
+		return errors.New("period too short")
+	}
+
+	numberPriceChanges := p.priceList.prices.Len()
+
+	if numberPriceChanges < int(p.minimumNoPriceChanges) {
+		return fmt.Errorf(
+			"current number of price changes (%d) smaller than minimum number of price changes (%d)",
+			numberPriceChanges,
+			p.minimumNoPriceChanges,
+		)
+	}
+
+	return nil
+}
+
+func (p timePeriod) String() string {
+	validity := "is valid"
+
+	if errValid := p.Valid(); errValid != nil {
+		validity = errValid.Error()
+	}
+
+	return strings.Join(
+		[]string{
+			"TimePeriod:",
+			fmt.Sprintf("Valid: %s", validity),
+			fmt.Sprintf("Minimum number Price Changes: %d", p.minimumNoPriceChanges),
+			fmt.Sprintf("Number Price Changes: %d", p.GetNoPriceChanges()),
+			fmt.Sprintf("Period Average: %s", p.GetPeriodAverage().String()),
+			fmt.Sprintf("Values: %s", p.getPeriodValues().String()),
+		},
+		"\n",
+	)
 }
