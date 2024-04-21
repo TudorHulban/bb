@@ -6,8 +6,14 @@ import (
 
 type OptionCoin func(*Coin)
 
-func WithStrategy(strategy strategies.IStrategyBuy) OptionCoin {
+func WithStrategyBuy(strategy strategies.IStrategyBuy) OptionCoin {
 	return func(c *Coin) {
 		c.strategiesBuy = append(c.strategiesBuy, strategy)
+	}
+}
+
+func WithStrategySell(strategy strategies.IStrategySell) OptionCoin {
+	return func(c *Coin) {
+		c.strategiesSell = append(c.strategiesSell, strategy)
 	}
 }

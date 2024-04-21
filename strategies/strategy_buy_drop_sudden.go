@@ -8,15 +8,16 @@ import (
 	"test/apperrors"
 	"test/helpers"
 	"test/ordering"
+	"test/timeperiod"
 
 	"github.com/govalues/decimal"
 )
 
-const nameStrategy = "Drop Sudden"
+const nameStrategyDropSudden = "Drop Sudden"
 
 type StrategyDropSudden struct {
 	PriceBeforeDrop decimal.Decimal
-	DropPercent     decimal.Decimal
+	PercentDrop     decimal.Decimal
 
 	numberSimultaneousOrders        *uint32
 	allowedNumberSimultaneousOrders uint16
@@ -24,13 +25,13 @@ type StrategyDropSudden struct {
 
 type ParamsNewStrategyDropSudden struct {
 	PriceBeforeDrop decimal.Decimal
-	DropPercent     decimal.Decimal
+	PercentDrop     decimal.Decimal
 
 	AllowedNumberSimultaneousOrders uint16
 }
 
-func NewStrategyDropSudden(params ParamsNewStrategyDropSudden) (*StrategyDropSudden, error) {
-	if !params.DropPercent.IsPos() {
+func NewStrategyDropSudden(params *ParamsNewStrategyDropSudden) (*StrategyDropSudden, error) {
+	if !params.PercentDrop.IsPos() {
 		return nil,
 			apperrors.ErrorInvalidInput{
 				InputName: "DropPercent",
@@ -41,7 +42,7 @@ func NewStrategyDropSudden(params ParamsNewStrategyDropSudden) (*StrategyDropSud
 
 	return &StrategyDropSudden{
 			PriceBeforeDrop:                 params.PriceBeforeDrop,
-			DropPercent:                     params.DropPercent,
+			PercentDrop:                     params.PercentDrop,
 			allowedNumberSimultaneousOrders: params.AllowedNumberSimultaneousOrders,
 
 			numberSimultaneousOrders: &zero,
@@ -61,22 +62,22 @@ func (s *StrategyDropSudden) SetPrice(price decimal.Decimal) error {
 	return nil
 }
 
-func (s *StrategyDropSudden) AddPriceChange(params *ParamsAddPriceChange) (ordering.Action, error) {
+func (s *StrategyDropSudden) AddPriceChange(params *ParamsAddPriceChangeBuy) (ordering.Action, error) {
 	difference, errSubtract := s.PriceBeforeDrop.Sub(params.PriceNow)
 	if errSubtract != nil {
 		return ordering.DoNothing, errSubtract
 	}
 
-	if difference == decimal.Zero {
+	if difference.IsNeg() {
 		return ordering.DoNothing,
-			errors.New("no price change")
+			errors.New("price went up")
 	}
 
 	if errPercent := helpers.PriceChangeByPercent(
 		&helpers.ParamsPriceChangeByPercent{
 			PriceOld: s.PriceBeforeDrop,
 			PriceNew: params.PriceNow,
-			Delta:    s.DropPercent,
+			Delta:    s.PercentDrop,
 		},
 	); errPercent != nil {
 		return ordering.DoNothing,
@@ -102,10 +103,14 @@ func (s StrategyDropSudden) String() string {
 	return strings.Join(
 		[]string{
 			"",
-			fmt.Sprintf("Strategy %s", nameStrategy),
-			fmt.Sprintf("Current orders trigerred %d", *s.numberSimultaneousOrders),
-			fmt.Sprintf("drop percent: %s%%.", s.DropPercent.String()),
-			fmt.Sprintf("current price before drop: %s.", s.PriceBeforeDrop.String()),
+			fmt.Sprintf("Strategy '%s'", nameStrategyDropSudden),
+			fmt.Sprintf("Current orders trigerred: %d.", *s.numberSimultaneousOrders),
+			fmt.Sprintf("Drop sudden percent: %s%%.", s.PercentDrop.String()),
+			fmt.Sprintf(
+				"Current average price for %s period: %s.",
+				timeperiod.NamePeriodMedium,
+				s.PriceBeforeDrop.String(),
+			),
 			"",
 		},
 		"\n",

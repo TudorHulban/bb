@@ -2,6 +2,7 @@ package coin
 
 import (
 	"fmt"
+	"test/configuration"
 	"test/ordering"
 	"test/strategies"
 	"testing"
@@ -11,29 +12,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStrategyDropSudden(t *testing.T) {
+func TestStrategies(t *testing.T) {
 	dropPercent, errDrop := decimal.NewFromFloat64(20.)
 	require.NoError(t, errDrop)
 
 	strategyDropSudden, errCr := strategies.NewStrategyDropSudden(
-		strategies.ParamsNewStrategyDropSudden{
-			DropPercent: dropPercent,
+		&strategies.ParamsNewStrategyDropSudden{
+			PercentDrop: dropPercent,
+		},
+	)
+	require.NoError(t, errCr)
+
+	raisePercent, errRaise := decimal.NewFromFloat64(10.)
+	require.NoError(t, errRaise)
+
+	strategySellSimple, errCr := strategies.NewStrategySellSimple(
+		&strategies.ParamsNewStrategySellSimple{
+			PercentRaise: raisePercent,
 		},
 	)
 	require.NoError(t, errCr)
 
 	c, errCr := NewCoin(
 		&ParamsNewCoin{
+			Code:     configuration.MON,
 			Ordering: ordering.NewOrderingLogOnly(),
 
 			MinimumPriceChangesMediumPeriod: 1,
 			MinimumPriceChangesShortPeriod:  1,
 
 			DefaultQuantityBuy: 1,
+			MaximumQuantity:    100,
+
+			PercentDeltaIsPriceChangeShort:  5,
+			PercentDeltaIsPriceChangeMedium: 5,
 		},
 
-		WithStrategy(
+		WithStrategyBuy(
 			strategyDropSudden,
+		),
+		WithStrategySell(
+			strategySellSimple,
 		),
 	)
 	require.NoError(t, errCr)
@@ -65,5 +84,5 @@ func TestStrategyDropSudden(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	fmt.Println(c.currentQuantity.Load())
+	fmt.Println("current quantity:", c.currentQuantity.Load())
 }

@@ -8,7 +8,7 @@ import (
 
 type IStrategyBuy interface {
 	SetPrice(price decimal.Decimal) error
-	AddPriceChange(params *ParamsAddPriceChange) (ordering.Action, error)
+	AddPriceChange(params *ParamsAddPriceChangeBuy) (ordering.Action, error)
 
 	CanPlaceOrder() bool
 	IncrementSimultaneousOrders()
@@ -19,5 +19,7 @@ var _ IStrategyBuy = &StrategyDropSudden{}
 
 type IStrategySell interface {
 	SetPrice(price decimal.Decimal) error
-	AddPriceChange(params *ParamsAddPriceChange) (ordering.Action, error)
+	AddPriceChange(params *ParamsAddPriceChangeSell) (ordering.Action, error)
 }
+
+var _ IStrategySell = &StrategySellSimple{}

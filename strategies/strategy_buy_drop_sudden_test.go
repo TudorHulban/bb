@@ -17,14 +17,14 @@ func TestStrategyDropSudden(t *testing.T) {
 
 	s := StrategyDropSudden{
 		PriceBeforeDrop: p1,
-		DropPercent:     p2,
+		PercentDrop:     p2,
 	}
 
 	p3, errP3 := decimal.NewFromFloat64(1.)
 	require.NoError(t, errP3)
 
 	action, errAdd := s.AddPriceChange(
-		&ParamsAddPriceChange{
+		&ParamsAddPriceChangeBuy{
 			AverageMediumPeriodPrice: p1,
 			PriceNow:                 p3,
 		},

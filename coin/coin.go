@@ -1,9 +1,9 @@
 package coin
 
 import (
-	"sync/atomic"
 	"test/apperrors"
 	"test/configuration"
+	"test/helpers"
 	"test/ordering"
 	"test/strategies"
 	"test/timeperiod"
@@ -23,23 +23,26 @@ type Coin struct {
 	periodShort  *timeperiod.TimePeriod
 	periodMedium *timeperiod.TimePeriod
 
-	defaultQuantityBuy uint32
-	currentQuantity    atomic.Uint32
+	averageBuyPrice helpers.Price
+
+	*quantities
 }
 
 type ParamsNewCoin struct {
 	Ordering ordering.IOrdering
-	Code     configuration.CoinCODE
+	Code     configuration.CoinCODE `valid:"required"`
 
 	MinimumPriceChangesShortPeriod  uint32 `valid:"required"`
 	MinimumPriceChangesMediumPeriod uint32 `valid:"required"`
 
 	DefaultQuantityBuy uint32 `valid:"required"`
+	MaximumQuantity    uint32 `valid:"required"`
 
 	MinimumDurationTimeframeShort  time.Duration
 	MinimumDurationTimeframeMedium time.Duration
 
-	percentDeltaIsPriceChangeShort float64
+	PercentDeltaIsPriceChangeShort  float64 `valid:"required"`
+	PercentDeltaIsPriceChangeMedium float64 `valid:"required"`
 }
 
 // NewCoin - if minimum duration is zero, no deletion would occur for old element.
@@ -58,7 +61,7 @@ func NewCoin(params *ParamsNewCoin, options ...OptionCoin) (*Coin, error) {
 
 			MinimumPriceChanges:       params.MinimumPriceChangesShortPeriod,
 			MinimumDurationTimeframe:  params.MinimumDurationTimeframeShort,
-			PercentDeltaIsPriceChange: params.percentDeltaIsPriceChangeShort,
+			PercentDeltaIsPriceChange: params.PercentDeltaIsPriceChangeShort,
 		},
 	)
 	if errCrShort != nil {
@@ -73,8 +76,9 @@ func NewCoin(params *ParamsNewCoin, options ...OptionCoin) (*Coin, error) {
 		&timeperiod.ParamsNewTimePeriod{
 			Name: timeperiod.NamePeriodMedium,
 
-			MinimumPriceChanges:      params.MinimumPriceChangesMediumPeriod,
-			MinimumDurationTimeframe: params.MinimumDurationTimeframeMedium,
+			MinimumPriceChanges:       params.MinimumPriceChangesMediumPeriod,
+			MinimumDurationTimeframe:  params.MinimumDurationTimeframeMedium,
+			PercentDeltaIsPriceChange: params.PercentDeltaIsPriceChangeMedium,
 		},
 	)
 	if errCrMedium != nil {
@@ -85,9 +89,23 @@ func NewCoin(params *ParamsNewCoin, options ...OptionCoin) (*Coin, error) {
 			}
 	}
 
+	quant, errCrQuantities := NewQuantities(
+		&ParamNewQuantities{
+			QuantityBuy:     params.DefaultQuantityBuy,
+			QuantityMaximum: params.MaximumQuantity,
+		},
+	)
+	if errCrQuantities != nil {
+		return nil,
+			apperrors.ErrValidation{
+				Caller: "NewCoin",
+				Issue:  errCrQuantities,
+			}
+	}
+
 	c := Coin{
-		code:               params.Code,
-		defaultQuantityBuy: params.DefaultQuantityBuy,
+		code:       params.Code,
+		quantities: quant,
 
 		periodShort:  periodShort,
 		periodMedium: periodMedium,
@@ -106,7 +124,11 @@ func (c *Coin) AddPriceChange(price decimal.Decimal) {
 	c.periodShort.AddPriceChange(price)
 	c.periodMedium.AddPriceChange(price)
 
-	c.validatePriceChange(price)
+	c.validatePriceChangeBuy(price)
+
+	time.Sleep(1 * time.Second)
+
+	c.validatePriceChangeSell(price)
 }
 
 func (c *Coin) AddPriceChanges(prices []decimal.Decimal) {
@@ -126,4 +148,8 @@ func (c *Coin) AddPriceChangesFloat(prices []float64) error {
 	}
 
 	return nil
+}
+
+func (c *Coin) setAveragePriceBuy() {
+
 }

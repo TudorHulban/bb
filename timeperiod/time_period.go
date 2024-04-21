@@ -49,7 +49,7 @@ func NewTimePeriod(params *ParamsNewTimePeriod) (*TimePeriod, error) {
 	if _, errVa := govalidator.ValidateStruct(params); errVa != nil {
 		return nil,
 			apperrors.ErrValidation{
-				Caller: "NewTimePeriod",
+				Caller: fmt.Sprintf("NewTimePeriod: %s", params.Name),
 				Issue:  errVa,
 			}
 	}
@@ -235,6 +235,7 @@ func (p TimePeriod) String() string {
 			fmt.Sprintf("Number Price Changes: %d", p.GetNoPriceChanges()),
 			fmt.Sprintf("Period Average: %s", p.GetPeriodAverage().String()),
 			fmt.Sprintf("Values: %s", p.getPeriodValues().String()),
+			"",
 		},
 		"\n",
 	)
