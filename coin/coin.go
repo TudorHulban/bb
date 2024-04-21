@@ -4,33 +4,27 @@ import (
 	"sync/atomic"
 	"test/apperrors"
 	"test/configuration"
-	"test/helpers"
 	"test/ordering"
 	"test/strategies"
+	"test/timeperiod"
 	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/govalues/decimal"
 )
 
-type Price struct {
-	AtTime time.Time
-	Value  decimal.Decimal
-}
-
 type Coin struct {
-	ordering ordering.IOrdering
+	ordering       ordering.IOrdering
+	strategiesBuy  []strategies.IStrategyBuy
+	strategiesSell []strategies.IStrategySell
 
 	code configuration.CoinCODE
 
-	periodShort  timePeriod
-	periodMedium timePeriod
+	periodShort  *timeperiod.TimePeriod
+	periodMedium *timeperiod.TimePeriod
 
-	percentDeltaIsPriceChange decimal.Decimal
-	defaultQuantityBuy        uint32
-	currentQuantity           atomic.Uint32
-
-	strategies []strategies.IStrategy
+	defaultQuantityBuy uint32
+	currentQuantity    atomic.Uint32
 }
 
 type ParamsNewCoin struct {
@@ -44,6 +38,8 @@ type ParamsNewCoin struct {
 
 	MinimumDurationTimeframeShort  time.Duration
 	MinimumDurationTimeframeMedium time.Duration
+
+	percentDeltaIsPriceChangeShort float64
 }
 
 // NewCoin - if minimum duration is zero, no deletion would occur for old element.
@@ -56,28 +52,45 @@ func NewCoin(params *ParamsNewCoin, options ...OptionCoin) (*Coin, error) {
 			}
 	}
 
-	deltaChange, _ := decimal.NewFromFloat64(configuration.DefaultPercentDeltaIsPriceChange)
+	periodShort, errCrShort := timeperiod.NewTimePeriod(
+		&timeperiod.ParamsNewTimePeriod{
+			Name: timeperiod.NamePeriodShort,
+
+			MinimumPriceChanges:       params.MinimumPriceChangesShortPeriod,
+			MinimumDurationTimeframe:  params.MinimumDurationTimeframeShort,
+			PercentDeltaIsPriceChange: params.percentDeltaIsPriceChangeShort,
+		},
+	)
+	if errCrShort != nil {
+		return nil,
+			apperrors.ErrValidation{
+				Caller: "NewCoin",
+				Issue:  errCrShort,
+			}
+	}
+
+	periodMedium, errCrMedium := timeperiod.NewTimePeriod(
+		&timeperiod.ParamsNewTimePeriod{
+			Name: timeperiod.NamePeriodMedium,
+
+			MinimumPriceChanges:      params.MinimumPriceChangesMediumPeriod,
+			MinimumDurationTimeframe: params.MinimumDurationTimeframeMedium,
+		},
+	)
+	if errCrMedium != nil {
+		return nil,
+			apperrors.ErrValidation{
+				Caller: "NewCoin",
+				Issue:  errCrMedium,
+			}
+	}
 
 	c := Coin{
 		code:               params.Code,
 		defaultQuantityBuy: params.DefaultQuantityBuy,
 
-		periodShort: NewTimePeriod(
-			&ParamsNewTimePeriod{
-				name:                     namePeriodShort,
-				MinimumPriceChanges:      params.MinimumPriceChangesShortPeriod,
-				minimumDurationTimeframe: params.MinimumDurationTimeframeShort,
-			},
-		),
-		periodMedium: NewTimePeriod(
-			&ParamsNewTimePeriod{
-				name:                     namePeriodMedium,
-				MinimumPriceChanges:      params.MinimumPriceChangesMediumPeriod,
-				minimumDurationTimeframe: params.MinimumDurationTimeframeMedium,
-			},
-		),
-
-		percentDeltaIsPriceChange: deltaChange,
+		periodShort:  periodShort,
+		periodMedium: periodMedium,
 
 		ordering: params.Ordering,
 	}
@@ -89,28 +102,7 @@ func NewCoin(params *ParamsNewCoin, options ...OptionCoin) (*Coin, error) {
 	return &c, nil
 }
 
-func (c *Coin) isPriceChange(priceNew decimal.Decimal) error {
-	c.periodShort.mux.Lock()
-	defer c.periodShort.mux.Unlock()
-
-	if c.periodShort.prices.Front() == nil {
-		return nil
-	}
-
-	return helpers.PriceChangeByPercent(
-		&helpers.ParamsPriceChangeByPercent{
-			PriceOld: c.periodShort.prices.Front().Value.(Price).Value,
-			PriceNew: priceNew,
-			Delta:    c.percentDeltaIsPriceChange,
-		},
-	)
-}
-
 func (c *Coin) AddPriceChange(price decimal.Decimal) {
-	if c.isPriceChange(price) != nil {
-		return
-	}
-
 	c.periodShort.AddPriceChange(price)
 	c.periodMedium.AddPriceChange(price)
 

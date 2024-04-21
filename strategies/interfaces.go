@@ -6,7 +6,7 @@ import (
 	"github.com/govalues/decimal"
 )
 
-type IStrategy interface {
+type IStrategyBuy interface {
 	SetPrice(price decimal.Decimal) error
 	AddPriceChange(params *ParamsAddPriceChange) (ordering.Action, error)
 
@@ -15,4 +15,9 @@ type IStrategy interface {
 	DecrementSimultaneousOrders()
 }
 
-var _ IStrategy = &StrategyDropSudden{}
+var _ IStrategyBuy = &StrategyDropSudden{}
+
+type IStrategySell interface {
+	SetPrice(price decimal.Decimal) error
+	AddPriceChange(params *ParamsAddPriceChange) (ordering.Action, error)
+}

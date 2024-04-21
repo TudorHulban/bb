@@ -1,4 +1,4 @@
-package coin
+package timeperiod
 
 import (
 	"strings"

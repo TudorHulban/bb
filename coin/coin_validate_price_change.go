@@ -9,7 +9,7 @@ import (
 )
 
 func (c *Coin) validatePriceChange(price decimal.Decimal) {
-	for _, strategy := range c.strategies {
+	for _, strategy := range c.strategiesBuy {
 		periodMediumAverage := c.periodMedium.GetPeriodAverage()
 		if periodMediumAverage == decimal.Zero {
 			continue

@@ -1,4 +1,4 @@
-package coin
+package timeperiod
 
 import (
 	"container/list"
@@ -7,10 +7,17 @@ import (
 	"sync"
 	"sync/atomic"
 	"test/apperrors"
+	"test/helpers"
 	"time"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/govalues/decimal"
 )
+
+type Price struct {
+	AtTime time.Time
+	Value  decimal.Decimal
+}
 
 type priceList struct {
 	prices *list.List
@@ -18,38 +25,80 @@ type priceList struct {
 	mux sync.RWMutex
 }
 
-type timePeriod struct {
+type TimePeriod struct {
 	priceList
 
 	name string
 
-	noPriceChanges atomic.Uint32
+	noPriceChanges            atomic.Uint32
+	percentDeltaIsPriceChange decimal.Decimal
 
 	minimumNoPriceChanges    uint32
 	minimumDurationTimeframe time.Duration
 }
 
 type ParamsNewTimePeriod struct {
-	name string
+	Name string `valid:"required"`
 
-	MinimumPriceChanges      uint32
-	minimumDurationTimeframe time.Duration
+	MinimumPriceChanges       uint32        `valid:"required"`
+	MinimumDurationTimeframe  time.Duration `valid:"oprional"`
+	PercentDeltaIsPriceChange float64       `valid:"required"`
 }
 
-func NewTimePeriod(params *ParamsNewTimePeriod) timePeriod {
-	return timePeriod{
-		priceList: priceList{
-			prices: list.New(),
-		},
-
-		minimumNoPriceChanges:    params.MinimumPriceChanges,
-		minimumDurationTimeframe: params.minimumDurationTimeframe,
-
-		name: params.name,
+func NewTimePeriod(params *ParamsNewTimePeriod) (*TimePeriod, error) {
+	if _, errVa := govalidator.ValidateStruct(params); errVa != nil {
+		return nil,
+			apperrors.ErrValidation{
+				Caller: "NewTimePeriod",
+				Issue:  errVa,
+			}
 	}
+
+	delta, errConv := decimal.NewFromFloat64(params.PercentDeltaIsPriceChange)
+	if errConv != nil {
+		return nil,
+			apperrors.ErrValidation{
+				Caller: "NewTimePeriod",
+				Issue:  errConv,
+			}
+	}
+
+	return &TimePeriod{
+			priceList: priceList{
+				prices: list.New(),
+			},
+
+			minimumNoPriceChanges:     params.MinimumPriceChanges,
+			minimumDurationTimeframe:  params.MinimumDurationTimeframe,
+			percentDeltaIsPriceChange: delta,
+
+			name: params.Name,
+		},
+		nil
 }
 
-func (p *timePeriod) AddPriceChange(price decimal.Decimal) {
+func (p *TimePeriod) isPriceChange(priceNew decimal.Decimal) error {
+	p.priceList.mux.Lock()
+	defer p.priceList.mux.Unlock()
+
+	if p.priceList.prices.Front() == nil {
+		return nil
+	}
+
+	return helpers.PriceChangeByPercent(
+		&helpers.ParamsPriceChangeByPercent{
+			PriceOld: p.priceList.prices.Front().Value.(Price).Value,
+			PriceNew: priceNew,
+			Delta:    p.percentDeltaIsPriceChange,
+		},
+	)
+}
+
+func (p *TimePeriod) AddPriceChange(price decimal.Decimal) {
+	if p.isPriceChange(price) != nil {
+		return
+	}
+
 	p.mux.Lock()
 
 	if p.minimumDurationTimeframe != 0 {
@@ -72,11 +121,11 @@ func (p *timePeriod) AddPriceChange(price decimal.Decimal) {
 	p.mux.Unlock()
 }
 
-func (p *timePeriod) GetNoPriceChanges() uint32 {
+func (p *TimePeriod) GetNoPriceChanges() uint32 {
 	return p.noPriceChanges.Load()
 }
 
-func (p *timePeriod) getPeriodValues() DecimalValues {
+func (p *TimePeriod) getPeriodValues() DecimalValues {
 	p.mux.Lock()
 	defer p.mux.Unlock()
 
@@ -91,7 +140,7 @@ func (p *timePeriod) getPeriodValues() DecimalValues {
 	return result
 }
 
-func (p *timePeriod) GetPeriodAverage() decimal.Decimal {
+func (p *TimePeriod) GetPeriodAverage() decimal.Decimal {
 	if errPeriodValid := p.Valid(); errPeriodValid != nil {
 		fmt.Println(errPeriodValid)
 
@@ -135,7 +184,7 @@ func (p *timePeriod) GetPeriodAverage() decimal.Decimal {
 	return average
 }
 
-func (p *timePeriod) Valid() error {
+func (p *TimePeriod) Valid() error {
 	p.priceList.mux.Lock()
 	defer p.priceList.mux.Unlock()
 
@@ -170,7 +219,7 @@ func (p *timePeriod) Valid() error {
 	return nil
 }
 
-func (p timePeriod) String() string {
+func (p TimePeriod) String() string {
 	validity := "is valid"
 
 	if errValid := p.Valid(); errValid != nil {
